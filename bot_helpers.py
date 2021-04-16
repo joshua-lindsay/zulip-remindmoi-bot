@@ -1,4 +1,3 @@
-
 from typing import Any, Dict
 from datetime import timedelta, datetime
 
@@ -17,10 +16,11 @@ MULTI_REMIND_ENDPOINT = ENDPOINT_URL + '/multi_remind'
 
 def is_add_command(content: str, units=UNITS + SINGULAR_UNITS) -> bool:
     """
-    Ensure message is in form <COMMAND> reminder <int> UNIT <str>
+    Ensure message is in form add <int> UNIT <str>
+    example: add 1 minutes message
     """
     try:
-        command = content.split(' ', maxsplit=4)  # Ensure the last element is str
+        command = content.split(' ', maxsplit=3)  # Ensure the last element is str
         assert command[0] == 'add'
         assert type(int(command[1])) == int
         assert command[2] in units
@@ -30,10 +30,50 @@ def is_add_command(content: str, units=UNITS + SINGULAR_UNITS) -> bool:
         return False
 
 
+def is_add_stream_command(content: str, units=UNITS + SINGULAR_UNITS) -> bool:
+    """
+    Ensure message is in form add-stream <str> <str> <int> UNIT <str>
+    example: add-stream stream topic 1 minutes message
+    """
+    try:
+        command = content.split(' ', maxsplit=5)  # Ensure the last element is str
+        assert command[0] == 'add-stream'
+        assert type(command[1]) == str
+        assert type(command[2]) == str
+        assert type(int(command[3])) == int
+        assert command[4] in units
+        assert type(command[5]) == str
+        return True
+    except (IndexError, AssertionError, ValueError):
+        return False
+
+
+def is_add_repeat_stream_command(content: str, units=UNITS + SINGULAR_UNITS) -> bool:
+    """
+    Ensure message is in form add-stream <str> <str> <int> UNIT every <int> UNIT <str>
+    example: add-stream stream topic 1 minutes every 1 minutes message
+    """
+    try:
+        command = content.split(' ', maxsplit=8)  # Ensure the last element is str
+        assert command[0] == 'add-stream'
+        assert type(command[1]) == str
+        assert type(command[2]) == str
+        assert type(int(command[3])) == int
+        assert command[4] in units
+        assert command[5] == 'every'
+        assert type(int(command[6])) == int
+        assert command[7] in units
+        assert type(command[8]) == str
+        return True
+    except (IndexError, AssertionError, ValueError):
+        return False
+
+
 def is_add_repeat_reminder_command(content: str, units=UNITS + SINGULAR_UNITS) -> bool:
-    '''
+    """
     Ensure message is in form ADD <int> UNIT every <int> UNIT <str>
-    '''
+    add 1 minutes every 1 minutes message
+    """
     try:
         command = content.split(' ', maxsplit=6)  # Ensure the last element is str
         assert command[0] == 'add'
@@ -95,19 +135,69 @@ def parse_add_command_content(message: Dict[str, Any]) -> Dict[str, Any]:
     Given a message object with reminder details,
     construct a JSON/dict.
     """
-    content = message['content'].split(' ', maxsplit=3)  # Ensure the last element is str
-    return {"zulip_user_email": message['sender_email'],
-            "title": content[3],
-            "created": message['timestamp'],
-            "deadline": compute_deadline_timestamp(message['timestamp'], content[1], content[2]),
-            "active": True}
+    content = message['content'].split(
+        ' ', maxsplit=3
+    )  # Ensure the last element is str
+    return {
+        'zulip_user_email': message['sender_email'],
+        'title': content[3],
+        'created': message['timestamp'],
+        'deadline': compute_deadline_timestamp(
+            message['timestamp'], content[1], content[2]
+        ),
+        'stream': '',
+        'topic': '',
+        'active': True,
+    }
+
+
+def parse_add_stream_command_content(message: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Given a message object with reminder details,
+    construct a JSON/dict.
+    """
+    # add-stream stream topic 1 minutes message
+    content = message['content'].split(' ', maxsplit=5)
+    return {
+        'zulip_user_email': message['sender_email'],
+        'title': content[5],
+        'created': message['timestamp'],
+        'deadline': compute_deadline_timestamp(
+            message['timestamp'], content[3], content[4]
+        ),
+        'stream': content[1],
+        'topic': content[2],
+        'active': True,
+    }
+
+
+def parse_add_repeat_stream_command_content(message: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Given a message object with reminder details,
+    construct a JSON/dict.
+    """
+    # add-stream stream topic 1 minutes message
+    content = message['content'].split(' ', maxsplit=8)
+    return {
+        'zulip_user_email': message['sender_email'],
+        'title': content[8],
+        'created': message['timestamp'],
+        'deadline': compute_deadline_timestamp(
+            message['timestamp'], content[3], content[4]
+        ),
+        'stream': content[1],
+        'topic': content[2],
+        'active': True,
+        'repeat_value': content[6],
+        'repeat_unit': content[7],
+    }
 
 
 def parse_add_reminder_command_content(message: Dict[str, Any]) -> Dict[str, Any]:
-    '''
+    """
     Given a message object with reminder details,
     construct a JSON/dict.
-    '''
+    """
     content = message['content'].split(
         ' ', maxsplit=6
     )  # Ensure the last element is str
@@ -118,6 +208,8 @@ def parse_add_reminder_command_content(message: Dict[str, Any]) -> Dict[str, Any
         'deadline': compute_deadline_timestamp(
             message['timestamp'], content[1], content[2]
         ),
+        'stream': '',
+        'topic': '',
         'active': True,
         'repeat_unit': content[5],
         'repeat_value': content[4],
@@ -153,8 +245,10 @@ def generate_reminders_list(response: Dict[str, Any]) -> str:
     if not reminders_list:
         return 'No reminders avaliable.'
     for reminder in reminders_list:
+        stream = f", stream: {reminder['stream']} topic: {reminder['topic']}" if reminder['stream'] else ""
+        print('stream',stream)
         bot_response += f"""
-        \nReminder id {reminder['reminder_id']}, titled {reminder['title']}, is scheduled on {datetime.fromtimestamp(reminder['deadline']).strftime('%Y-%m-%d %H:%M')} {reminder['interval']}
+        \nReminder id {reminder['reminder_id']}, titled {reminder['title']}{stream}, is scheduled on {datetime.fromtimestamp(reminder['deadline']).strftime('%Y-%m-%d %H:%M')} {reminder['interval']}
         """
     return bot_response
 

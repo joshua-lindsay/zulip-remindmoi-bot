@@ -14,7 +14,7 @@ client = zulip.Client(config_file=ZULIPRC)
 def send_private_zulip_reminder(reminder_id: int) -> bool:
     reminder = Reminder.objects.get(reminder_id=reminder_id)
     emails = reminder.zulip_user_email.split(',')
-    content = f"Don't forget: {reminder.title}. Reminder id: {reminder.reminder_id}"
+    content = f"{reminder.title}. Reminder id: {reminder.reminder_id}"
     for email in emails:
         response = client.send_message({
             "type": "private",
@@ -24,6 +24,24 @@ def send_private_zulip_reminder(reminder_id: int) -> bool:
     reminder.active = False  # For now, set reminder to negative to denoate that it's done
     return response['result'] == 'success'
 
+def send_stream_zulip_reminder(reminder_id: int) -> bool:
+    reminder = Reminder.objects.get(reminder_id=reminder_id)
+    # emails = reminder.zulip_user_email.split(',')
+
+    
+    content = f"{reminder.title}. Reminder id: {reminder.reminder_id}"
+    response = client.send_message(
+        {
+            "type": "stream",
+            "to": reminder.stream,
+            "topic": reminder.topic,
+            "content": content,
+        }
+    )
+    reminder.active = (
+        False  # For now, set reminder to negative to denoate that it's done
+    )
+    return response["result"] == "success"
 
 def repeat_unit_to_interval(repeat_unit: str, repeat_value: int) -> Dict[str, int]:
     if repeat_unit in SINGULAR_UNITS:  # Convert singular units to plural
