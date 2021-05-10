@@ -60,15 +60,19 @@ Avaliable units: days, weeks, months
 
 
 To add a reminder to a stream
-`add-stream stream topic int <UNIT> <title_of_reminder>`
+`add-stream stream topic 
+int <UNIT> <title_of_reminder>`
 
-`add-stream stream topic 1 minutes dont forget`
+`add-stream stream topic 
+1 minutes dont forget`
 
 
 To add a reminder to a stream and repeat:
-`add-stream stream topic int <UNIT> every int <UNIT> <title_of_reminder>`
+`add-stream stream topic 
+int <UNIT> every int <UNIT> <title_of_reminder>`
 
-`add-stream stream topic 1 minutes every 1 minutes dont forget`
+`add-stream stream topic 
+1 minutes every 1 minutes dont forget`
 
 """
 

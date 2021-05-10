@@ -36,13 +36,18 @@ def is_add_stream_command(content: str, units=UNITS + SINGULAR_UNITS) -> bool:
     example: add-stream stream topic 1 minutes message
     """
     try:
-        command = content.split(' ', maxsplit=5)  # Ensure the last element is str
-        assert command[0] == 'add-stream'
-        assert type(command[1]) == str
-        assert type(command[2]) == str
-        assert type(int(command[3])) == int
-        assert command[4] in units
-        assert type(command[5]) == str
+        command = content.splitlines()
+        addStreamTopic = command[0].split(' ', maxsplit=2)
+        assert addStreamTopic[0] == 'add-stream'
+        # Stream
+        assert type(addStreamTopic[1]) == str
+        # Topic
+        assert type(addStreamTopic[2]) == str
+
+        frequencyMessage = command[1].split(' ', maxsplit=2)
+        assert type(int(frequencyMessage[0])) == int
+        assert frequencyMessage[1] in units
+        assert type(frequencyMessage[2]) == str
         return True
     except (IndexError, AssertionError, ValueError):
         return False
@@ -54,16 +59,21 @@ def is_add_repeat_stream_command(content: str, units=UNITS + SINGULAR_UNITS) -> 
     example: add-stream stream topic 1 minutes every 1 minutes message
     """
     try:
-        command = content.split(' ', maxsplit=8)  # Ensure the last element is str
-        assert command[0] == 'add-stream'
-        assert type(command[1]) == str
-        assert type(command[2]) == str
-        assert type(int(command[3])) == int
-        assert command[4] in units
-        assert command[5] == 'every'
-        assert type(int(command[6])) == int
-        assert command[7] in units
-        assert type(command[8]) == str
+        command = content.splitlines()
+        addStreamTopic = command[0].split(' ', maxsplit=2)
+        assert addStreamTopic[0] == 'add-stream'
+        # Stream
+        assert type(addStreamTopic[1]) == str
+        # Topic
+        assert type(addStreamTopic[2]) == str
+
+        frequencyMessage = command[1].split(' ', maxsplit=5)
+        assert type(int(frequencyMessage[0])) == int
+        assert frequencyMessage[1] in units
+        assert frequencyMessage[2] == 'every'
+        assert type(int(frequencyMessage[3])) == int
+        assert frequencyMessage[4] in units
+        assert type(frequencyMessage[5]) == str
         return True
     except (IndexError, AssertionError, ValueError):
         return False
@@ -156,17 +166,20 @@ def parse_add_stream_command_content(message: Dict[str, Any]) -> Dict[str, Any]:
     Given a message object with reminder details,
     construct a JSON/dict.
     """
-    # add-stream stream topic 1 minutes message
-    content = message['content'].split(' ', maxsplit=5)
+    # add-stream stream topic 
+    # 1 minutes message
+    command = message['content'].splitlines()
+    addStreamTopic = command[0].split(' ', maxsplit=2)
+    frequencyMessage = command[1].split(' ', maxsplit=2)
     return {
         'zulip_user_email': message['sender_email'],
-        'title': content[5],
+        'title': frequencyMessage[2],
         'created': message['timestamp'],
         'deadline': compute_deadline_timestamp(
-            message['timestamp'], content[3], content[4]
+            message['timestamp'], frequencyMessage[0], frequencyMessage[1]
         ),
-        'stream': content[1],
-        'topic': content[2],
+        'stream': addStreamTopic[1],
+        'topic': addStreamTopic[2],
         'active': True,
     }
 
@@ -176,20 +189,24 @@ def parse_add_repeat_stream_command_content(message: Dict[str, Any]) -> Dict[str
     Given a message object with reminder details,
     construct a JSON/dict.
     """
-    # add-stream stream topic 1 minutes message
-    content = message['content'].split(' ', maxsplit=8)
+    # add-stream stream topic 
+    # 1 minutes every 5 minutes message
+    command = message['content'].splitlines()
+    addStreamTopic = command[0].split(' ', maxsplit=2)
+    frequencyMessage = command[1].split(' ', maxsplit=5)
+
     return {
         'zulip_user_email': message['sender_email'],
-        'title': content[8],
+        'title': frequencyMessage[5],
         'created': message['timestamp'],
         'deadline': compute_deadline_timestamp(
-            message['timestamp'], content[3], content[4]
+            message['timestamp'], frequencyMessage[0], frequencyMessage[1]
         ),
-        'stream': content[1],
-        'topic': content[2],
+        'stream': addStreamTopic[1],
+        'topic': addStreamTopic[2],
         'active': True,
-        'repeat_value': content[6],
-        'repeat_unit': content[7],
+        'repeat_value': frequencyMessage[3],
+        'repeat_unit': frequencyMessage[4],
     }
 
 
