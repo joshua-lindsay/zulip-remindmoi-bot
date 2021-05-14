@@ -9,3 +9,5 @@ class Reminder(models.Model):
     created = models.DateTimeField()
     deadline = models.DateTimeField()
     active = models.BooleanField(default=True)
+    stream = models.CharField(max_length=30, default="")
+    topic = models.CharField(max_length=30, default="")

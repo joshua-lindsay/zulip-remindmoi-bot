@@ -15,8 +15,10 @@ from remindmoi_bot.models import Reminder
 from remindmoi_bot.scheduler import scheduler
 from remindmoi_bot.zulip_utils import (send_private_zulip_reminder,
                                        repeat_unit_to_interval,
-                                       get_user_emails)
+                                       get_user_emails,
+                                       send_stream_zulip_reminder)
 from apscheduler.triggers.interval import IntervalTrigger
+
 
 @csrf_exempt
 @require_POST
@@ -27,12 +29,17 @@ def add_reminder(request):
                                zulip_user_email=reminder_obj['zulip_user_email'],
                                title=reminder_obj['title'],
                                created=datetime.utcfromtimestamp(reminder_obj['created']).replace(tzinfo=pytz.utc),
-                               deadline=datetime.utcfromtimestamp(reminder_obj['deadline']).replace(tzinfo=pytz.utc)
+                               deadline=datetime.utcfromtimestamp(reminder_obj['deadline']).replace(tzinfo=pytz.utc),
+                               stream=reminder_obj['stream'],
+                               topic=reminder_obj['topic'],
                                )
     reminder.save()
+
     scheduler.add_job(  # Schedule reminder
-        send_private_zulip_reminder,
-        'date',
+        send_stream_zulip_reminder
+        if reminder_obj["stream"]
+        else send_private_zulip_reminder,
+        "date",
         run_date=reminder.deadline,
         args=[reminder.reminder_id],
         # Create job name from title and reminder id
@@ -112,11 +119,12 @@ def list_reminders(request):
         if scheduled_job is not None:  
             if isinstance(scheduled_job.trigger,IntervalTrigger):
                 interval = f"schedule interval {str(scheduled_job.trigger.interval)}"
-
         response_reminders.append({'title': reminder['title'],
                                    'deadline': reminder['deadline'].timestamp(),
                                    'reminder_id': reminder['reminder_id'],
-                                   'interval' : interval})
+                                   'interval' : interval,
+                                   'stream': reminder['stream'],
+                                   'topic': reminder['topic']})
 
     return JsonResponse({'success': True, 'reminders_list': response_reminders})
 
