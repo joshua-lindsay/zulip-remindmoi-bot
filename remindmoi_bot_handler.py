@@ -22,7 +22,7 @@ from bot_helpers import (
     generate_reminders_list,
     parse_repeat_command_content,
     parse_multi_remind_command_content,
-    parse_add_reminder_command_content,
+    parse_add_repeat_command_content,
     parse_add_stream_command_content,
     parse_add_repeat_stream_command_content,
 )
@@ -96,8 +96,23 @@ def get_bot_response(message: Dict[str, Any], bot_handler: Any) -> str:
         return USAGE
 
     try:
+        if is_add_repeat_stream_command(message["content"]):
+            reminder_object = parse_add_repeat_stream_command_content(message)
+            response = requests.post(url=ADD_ENDPOINT, json=reminder_object)
+            reminder_id = response.json()["reminder_id"]
+            reminder_object["reminder_id"] = str(reminder_id)
+            response = requests.post(url=REPEAT_ENDPOINT, json=reminder_object)
+            response = response.json()
+            assert response["success"]
+            return f"Repeat reminder stored in Stream: {reminder_object['stream']} - Topic: {reminder_object['topic']}. Your reminder id is: {reminder_id}"
+        if is_add_stream_command(message["content"]):
+            reminder_object = parse_add_stream_command_content(message)
+            response = requests.post(url=ADD_ENDPOINT, json=reminder_object)
+            response = response.json()
+            assert response["success"]
+            return f"Reminder stored in Stream: {reminder_object['stream']} - Topic: {reminder_object['topic']}. Your reminder id is: {response['reminder_id']}"
         if is_add_repeat_reminder_command(message["content"]):
-            reminder_object = parse_add_reminder_command_content(message)
+            reminder_object = parse_add_repeat_command_content(message)
             response = requests.post(url=ADD_ENDPOINT, json=reminder_object)
             reminder_id = response.json()["reminder_id"]
             reminder_object["reminder_id"] = str(reminder_id)
@@ -111,21 +126,6 @@ def get_bot_response(message: Dict[str, Any], bot_handler: Any) -> str:
             response = response.json()
             assert response["success"]
             return f"Reminder stored. Your reminder id is: {response['reminder_id']}"
-        if is_add_repeat_stream_command(message["content"]):
-            reminder_object = parse_add_repeat_stream_command_content(message)
-            response = requests.post(url=ADD_ENDPOINT, json=reminder_object)
-            reminder_id = response.json()["reminder_id"]
-            reminder_object["reminder_id"] = str(reminder_id)
-            response = requests.post(url=REPEAT_ENDPOINT, json=reminder_object)
-            response = response.json()
-            assert response["success"]
-            return f"Repeat reminder stored in stream {reminder_object['stream']} topic {reminder_object['topic']}. Your reminder id is: {reminder_id}"
-        if is_add_stream_command(message["content"]):
-            reminder_object = parse_add_stream_command_content(message)
-            response = requests.post(url=ADD_ENDPOINT, json=reminder_object)
-            response = response.json()
-            assert response["success"]
-            return f"Reminder stored in stream {reminder_object['stream']} topic {reminder_object['topic']}. Your reminder id is: {response['reminder_id']}"
         if is_remove_command(message["content"]):
             reminder_id = parse_remove_command_content(message["content"])
             response = requests.post(url=REMOVE_ENDPOINT, json=reminder_id)
@@ -154,7 +154,9 @@ def get_bot_response(message: Dict[str, Any], bot_handler: Any) -> str:
             response = response.json()
             assert response["success"]
             return f"Reminder will be sent to the specified recepients."  # Todo: add list of recepients
-        return "Invalid input. Please check help."
+        return f"""Invalid input.
+        
+        {USAGE}"""
     except requests.exceptions.ConnectionError:
         return "Server not running, call Karim"
     except (json.JSONDecodeError, AssertionError):

@@ -1,133 +1,83 @@
+import re
+import logging
 from typing import Any, Dict
 from datetime import timedelta, datetime
 
-
-UNITS = ['minutes', 'hours', 'days', 'weeks']
 SINGULAR_UNITS = ['minute', 'hour', 'day', 'week']
-REPEAT_UNITS = ['weekly', 'daily', 'monthly'] + ['minutely']  # Remove after testing 
+
+NEWLINE_REGEX = '[\\n\\r]{1,2}'
+
+UNITS_REGEX = '(\d+) (minute|hour|day|week)s?'
+DATETIME_REGEX = '(\d{1,2}/\d{1,2}/\d{4} (?:2[0-3]|[01][0-9]):[0-5][0-9])'
+TIMESTAMP_REGEX = f'({UNITS_REGEX}|{DATETIME_REGEX})'
+
+REPEAT_INTERVAL_REGEX = f'every {UNITS_REGEX}'
+
+ADD_REGEX = re.compile(f'^add\s+{TIMESTAMP_REGEX}\s+(.+)$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
+ADD_REPEAT_REGEX = re.compile(f'^add\s+{TIMESTAMP_REGEX}\s+{REPEAT_INTERVAL_REGEX}\s+(.+)$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
+ADD_STREAM_REGEX = re.compile(f'^add\s+stream:\s*(.+)\s+topic:\s*(.+)\s+{TIMESTAMP_REGEX}\s+(.+)$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
+ADD_REPEAT_STREAM_REGEX = re.compile(f'^add\s+stream:\s*(.+)\s+topic:\s*(.+)\s+{TIMESTAMP_REGEX}\s+{REPEAT_INTERVAL_REGEX}\s+(.+)$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
+REPEAT_REGEX = re.compile(f'^repeat\s+(\d+)\s+{REPEAT_INTERVAL_REGEX}$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
+REMOVE_REGEX = re.compile('^remove\s+(\d+)$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
+LIST_REGEX = re.compile('^list$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
 
 ENDPOINT_URL = 'http://localhost:8789'
-ADD_ENDPOINT = ENDPOINT_URL + '/add_reminder'
-REMOVE_ENDPOINT = ENDPOINT_URL + '/remove_reminder'
-LIST_ENDPOINT = ENDPOINT_URL + '/list_reminders'
-REPEAT_ENDPOINT = ENDPOINT_URL + '/repeat_reminder'
-MULTI_REMIND_ENDPOINT = ENDPOINT_URL + '/multi_remind'
+ADD_ENDPOINT = f'{ENDPOINT_URL}/add_reminder'
+REMOVE_ENDPOINT = f'{ENDPOINT_URL}/remove_reminder'
+LIST_ENDPOINT = f'{ENDPOINT_URL}/list_reminders'
+REPEAT_ENDPOINT = f'{ENDPOINT_URL}/repeat_reminder'
+MULTI_REMIND_ENDPOINT = f'{ENDPOINT_URL}/multi_remind'
 
 
-def is_add_command(content: str, units=UNITS + SINGULAR_UNITS) -> bool:
+def is_add_command(content: str) -> bool:
     """
     Ensure message is in form add <int> UNIT <str>
     example: add 1 minutes message
     """
-    try:
-        command = content.split(' ', maxsplit=3)  # Ensure the last element is str
-        assert command[0] == 'add'
-        assert type(int(command[1])) == int
-        assert command[2] in units
-        assert type(command[3]) == str
-        return True
-    except (IndexError, AssertionError, ValueError):
-        return False
+    match = ADD_REGEX.search(content)
+    return match is not None and len(match.groups()) == 5
 
 
-def is_add_stream_command(content: str, units=UNITS + SINGULAR_UNITS) -> bool:
-    """
-    Ensure message is in form add-stream <str> <str> <int> UNIT <str>
-    example: add-stream stream topic 1 minutes message
-    """
-    try:
-        command = content.splitlines()
-        addStreamTopic = command[0].split(' ', maxsplit=2)
-        assert addStreamTopic[0] == 'add-stream'
-        # Stream
-        assert type(addStreamTopic[1]) == str
-        # Topic
-        assert type(addStreamTopic[2]) == str
-
-        frequencyMessage = command[1].split(' ', maxsplit=2)
-        assert type(int(frequencyMessage[0])) == int
-        assert frequencyMessage[1] in units
-        assert type(frequencyMessage[2]) == str
-        return True
-    except (IndexError, AssertionError, ValueError):
-        return False
-
-
-def is_add_repeat_stream_command(content: str, units=UNITS + SINGULAR_UNITS) -> bool:
-    """
-    Ensure message is in form add-stream <str> <str> <int> UNIT every <int> UNIT <str>
-    example: add-stream stream topic 1 minutes every 1 minutes message
-    """
-    try:
-        command = content.splitlines()
-        addStreamTopic = command[0].split(' ', maxsplit=2)
-        assert addStreamTopic[0] == 'add-stream'
-        # Stream
-        assert type(addStreamTopic[1]) == str
-        # Topic
-        assert type(addStreamTopic[2]) == str
-
-        frequencyMessage = command[1].split(' ', maxsplit=5)
-        assert type(int(frequencyMessage[0])) == int
-        assert frequencyMessage[1] in units
-        assert frequencyMessage[2] == 'every'
-        assert type(int(frequencyMessage[3])) == int
-        assert frequencyMessage[4] in units
-        assert type(frequencyMessage[5]) == str
-        return True
-    except (IndexError, AssertionError, ValueError):
-        return False
-
-
-def is_add_repeat_reminder_command(content: str, units=UNITS + SINGULAR_UNITS) -> bool:
+def is_add_repeat_reminder_command(content: str) -> bool:
     """
     Ensure message is in form ADD <int> UNIT every <int> UNIT <str>
     add 1 minutes every 1 minutes message
     """
-    try:
-        command = content.split(' ', maxsplit=6)  # Ensure the last element is str
-        assert command[0] == 'add'
-        assert type(int(command[1])) == int
-        assert command[2] in units
-        assert command[3] == 'every'
-        assert type(int(command[4])) == int
-        assert command[5] in units
-        assert type(command[6]) == str
-        return True
-    except (IndexError, AssertionError, ValueError):
-        return False
+    match = ADD_REPEAT_REGEX.search(content)
+    return match is not None and len(match.groups()) == 7
+
+
+def is_add_stream_command(content: str) -> bool:
+    """
+    Ensure message is in form add-stream <str> <str> <int> UNIT <str>
+    example: add-stream stream topic 1 minutes message
+    """
+    match = ADD_STREAM_REGEX.search(content)
+    return match is not None and len(match.groups()) == 7
+
+
+def is_add_repeat_stream_command(content: str) -> bool:
+    """
+    Ensure message is in form add-stream <str> <str> <int> UNIT every <int> UNIT <str>
+    example: add-stream stream topic 1 minutes every 1 minutes message
+    """
+    match = ADD_REPEAT_STREAM_REGEX.search(content)
+    return match is not None and len(match.groups()) == 9
 
 
 def is_remove_command(content: str) -> bool:
-    try:
-        command = content.split(' ')
-        assert command[0] == 'remove'
-        assert type(int(command[1])) == int
-        return True
-    except (AssertionError, IndexError, ValueError):
-        return False
+    match = REMOVE_REGEX.search(content)
+    return match is not None and len(match.groups()) == 1
 
 
 def is_list_command(content: str) -> bool:
-    try:
-        command = content.split(' ')
-        assert command[0] == 'list'
-        return True
-    except (AssertionError, IndexError, ValueError):
-        return False
+    match = LIST_REGEX.search(content)
+    return match is not None
 
 
-def is_repeat_reminder_command(content: str, units=UNITS + SINGULAR_UNITS) -> bool:
-    try:
-        command = content.split(' ')
-        assert command[0] == 'repeat'
-        assert type(int(command[1])) == int
-        assert command[2] == 'every'
-        assert type(int(command[3])) == int
-        assert command[4] in units
-        return True
-    except (AssertionError, IndexError, ValueError):
-        return False
+def is_repeat_reminder_command(content: str) -> bool:
+    match = REPEAT_REGEX.search(content)
+    return match is not None and len(match.groups()) == 3
 
 
 def is_multi_remind_command(content: str) -> bool:
@@ -145,19 +95,39 @@ def parse_add_command_content(message: Dict[str, Any]) -> Dict[str, Any]:
     Given a message object with reminder details,
     construct a JSON/dict.
     """
-    content = message['content'].split(
-        ' ', maxsplit=3
-    )  # Ensure the last element is str
+    match = ADD_REGEX.search(message['content'])
+    content = match.groups()
     return {
         'zulip_user_email': message['sender_email'],
-        'title': content[3],
+        'title': content[4],
         'created': message['timestamp'],
         'deadline': compute_deadline_timestamp(
-            message['timestamp'], content[1], content[2]
+            message['timestamp'], content[1], content[2], content[3]
         ),
         'stream': '',
         'topic': '',
         'active': True,
+    }
+
+def parse_add_repeat_command_content(message: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Given a message object with reminder details,
+    construct a JSON/dict.
+    """
+    match = ADD_REPEAT_REGEX.search(message['content'])
+    content = match.groups()
+    return {
+        'zulip_user_email': message['sender_email'],
+        'title': content[6],
+        'created': message['timestamp'],
+        'deadline': compute_deadline_timestamp(
+            message['timestamp'], content[1], content[2], content[3]
+        ),
+        'stream': '',
+        'topic': '',
+        'active': True,
+        'repeat_unit': content[5],
+        'repeat_value': content[4],
     }
 
 
@@ -168,18 +138,17 @@ def parse_add_stream_command_content(message: Dict[str, Any]) -> Dict[str, Any]:
     """
     # add-stream stream topic 
     # 1 minutes message
-    command = message['content'].splitlines()
-    addStreamTopic = command[0].split(' ', maxsplit=2)
-    frequencyMessage = command[1].split(' ', maxsplit=2)
+    match = ADD_STREAM_REGEX.search(message['content'])
+    content = match.groups()
     return {
         'zulip_user_email': message['sender_email'],
-        'title': frequencyMessage[2],
+        'title': content[6],
         'created': message['timestamp'],
         'deadline': compute_deadline_timestamp(
-            message['timestamp'], frequencyMessage[0], frequencyMessage[1]
+            message['timestamp'], content[3], content[4], content[5]
         ),
-        'stream': addStreamTopic[1],
-        'topic': addStreamTopic[2],
+        'stream': content[0],
+        'topic': content[1],
         'active': True,
     }
 
@@ -191,58 +160,39 @@ def parse_add_repeat_stream_command_content(message: Dict[str, Any]) -> Dict[str
     """
     # add-stream stream topic 
     # 1 minutes every 5 minutes message
-    command = message['content'].splitlines()
-    addStreamTopic = command[0].split(' ', maxsplit=2)
-    frequencyMessage = command[1].split(' ', maxsplit=5)
-
+    match = ADD_REPEAT_STREAM_REGEX.search(message['content'])
+    content = match.groups()
     return {
         'zulip_user_email': message['sender_email'],
-        'title': frequencyMessage[5],
+        'title': content[8],
         'created': message['timestamp'],
         'deadline': compute_deadline_timestamp(
-            message['timestamp'], frequencyMessage[0], frequencyMessage[1]
+            message['timestamp'], content[3], content[4], content[5]
         ),
-        'stream': addStreamTopic[1],
-        'topic': addStreamTopic[2],
+        'stream': content[0],
+        'topic': content[1],
         'active': True,
-        'repeat_value': frequencyMessage[3],
-        'repeat_unit': frequencyMessage[4],
-    }
-
-
-def parse_add_reminder_command_content(message: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Given a message object with reminder details,
-    construct a JSON/dict.
-    """
-    content = message['content'].split(
-        ' ', maxsplit=6
-    )  # Ensure the last element is str
-    return {
-        'zulip_user_email': message['sender_email'],
-        'title': content[6],
-        'created': message['timestamp'],
-        'deadline': compute_deadline_timestamp(
-            message['timestamp'], content[1], content[2]
-        ),
-        'stream': '',
-        'topic': '',
-        'active': True,
-        'repeat_unit': content[5],
-        'repeat_value': content[4],
+        'repeat_unit': content[7],
+        'repeat_value': content[6],
     }
 
 
 def parse_remove_command_content(content: str) -> Dict[str, Any]:
-    command = content.split(' ')
-    return {'reminder_id': command[1]}
+    match = REMOVE_REGEX.search(content)
+    groups = match.groups()
+    return {
+        'reminder_id': groups[0],
+    }
 
 
 def parse_repeat_command_content(content: str) -> Dict[str, Any]:
-    command = content.split(' ')
-    return {'reminder_id': command[1],
-            'repeat_unit': command[4],
-            'repeat_value': command[3]}
+    match = REPEAT_REGEX.search(content)
+    groups = match.groups()
+    return {
+        'reminder_id': groups[0],
+        'repeat_value': groups[1],
+        'repeat_unit': groups[2],
+        }
 
 
 def parse_multi_remind_command_content(content: str) -> Dict[str, Any]:
@@ -263,21 +213,25 @@ def generate_reminders_list(response: Dict[str, Any]) -> str:
         return 'No reminders avaliable.'
     for reminder in reminders_list:
         stream = f", stream: {reminder['stream']} topic: {reminder['topic']}" if reminder['stream'] else ""
-        print('stream',stream)
         bot_response += f"""
         \nReminder id {reminder['reminder_id']}, titled {reminder['title']}{stream}, is scheduled on {datetime.fromtimestamp(reminder['deadline']).strftime('%Y-%m-%d %H:%M')} {reminder['interval']}
         """
     return bot_response
 
 
-def compute_deadline_timestamp(timestamp_submitted: str, time_value: int, time_unit: str) -> str:
+def compute_deadline_timestamp(timestamp_submitted: str, time_value: int, time_unit: str, datetime_text: str) -> str:
     """
     Given a submitted stamp and an interval,
     return deadline timestamp.
     """
-    if time_unit in SINGULAR_UNITS:  # Convert singular units to plural
-        time_unit = f"{time_unit}s"
-
-    interval = timedelta(**{time_unit: int(time_value)})
     datetime_submitted = datetime.fromtimestamp(timestamp_submitted)
-    return (datetime_submitted + interval).timestamp()
+    if time_value is not None and time_unit is not None:
+        if time_unit in SINGULAR_UNITS:  # Convert singular units to plural
+            time_unit = f"{time_unit}s"
+
+        interval = timedelta(**{time_unit: int(time_value)})
+        return (datetime_submitted + interval).timestamp()
+    elif datetime_text is not None:
+        datetime_value = datetime.strptime(datetime_text, '%d/%m/%Y %H:%M')
+        return datetime_value.timestamp()
+    return timestamp_submitted
