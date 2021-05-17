@@ -1,23 +1,15 @@
 import re
-import logging
 from typing import Any, Dict
 from datetime import timedelta, datetime
 
 SINGULAR_UNITS = ['minute', 'hour', 'day', 'week']
 
-NEWLINE_REGEX = '[\\n\\r]{1,2}'
-
 UNITS_REGEX = '(\d+) (minute|hour|day|week)s?'
 DATETIME_REGEX = '(\d{1,2}/\d{1,2}/\d{4} (?:2[0-3]|[01][0-9]):[0-5][0-9])'
-TIMESTAMP_REGEX = f'({UNITS_REGEX}|{DATETIME_REGEX})'
+TIMESTAMP_REGEX = f'(in {UNITS_REGEX}|at {DATETIME_REGEX})'
 
-REPEAT_INTERVAL_REGEX = f'every {UNITS_REGEX}'
-
-ADD_REGEX = re.compile(f'^add\s+{TIMESTAMP_REGEX}\s+(.+)$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
-ADD_REPEAT_REGEX = re.compile(f'^add\s+{TIMESTAMP_REGEX}\s+{REPEAT_INTERVAL_REGEX}\s+(.+)$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
-ADD_STREAM_REGEX = re.compile(f'^add\s+stream:\s*(.+)\s+topic:\s*(.+)\s+{TIMESTAMP_REGEX}\s+(.+)$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
-ADD_REPEAT_STREAM_REGEX = re.compile(f'^add\s+stream:\s*(.+)\s+topic:\s*(.+)\s+{TIMESTAMP_REGEX}\s+{REPEAT_INTERVAL_REGEX}\s+(.+)$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
-REPEAT_REGEX = re.compile(f'^repeat\s+(\d+)\s+{REPEAT_INTERVAL_REGEX}$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
+ADD_REGEX = re.compile(f'^add\s+(stream:\s*(.+)\s+topic:\s*(.+)\s+)?{TIMESTAMP_REGEX}\s+(repeat every\s+{UNITS_REGEX}\s+)?(.+)$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
+REPEAT_REGEX = re.compile(f'^repeat\s+(\d+)\s+every\s+{UNITS_REGEX}$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
 REMOVE_REGEX = re.compile('^remove\s+(\d+)$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
 LIST_REGEX = re.compile('^list$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
 
@@ -31,38 +23,11 @@ MULTI_REMIND_ENDPOINT = f'{ENDPOINT_URL}/multi_remind'
 
 def is_add_command(content: str) -> bool:
     """
-    Ensure message is in form add <int> UNIT <str>
-    example: add 1 minutes message
-    """
-    match = ADD_REGEX.search(content)
-    return match is not None and len(match.groups()) == 5
-
-
-def is_add_repeat_reminder_command(content: str) -> bool:
-    """
-    Ensure message is in form ADD <int> UNIT every <int> UNIT <str>
-    add 1 minutes every 1 minutes message
-    """
-    match = ADD_REPEAT_REGEX.search(content)
-    return match is not None and len(match.groups()) == 7
-
-
-def is_add_stream_command(content: str) -> bool:
-    """
-    Ensure message is in form add-stream <str> <str> <int> UNIT <str>
-    example: add-stream stream topic 1 minutes message
-    """
-    match = ADD_STREAM_REGEX.search(content)
-    return match is not None and len(match.groups()) == 7
-
-
-def is_add_repeat_stream_command(content: str) -> bool:
-    """
     Ensure message is in form add-stream <str> <str> <int> UNIT every <int> UNIT <str>
     example: add-stream stream topic 1 minutes every 1 minutes message
     """
-    match = ADD_REPEAT_STREAM_REGEX.search(content)
-    return match is not None and len(match.groups()) == 9
+    match = ADD_REGEX.search(content)
+    return match is not None and len(match.groups()) == 11
 
 
 def is_remove_command(content: str) -> bool:
@@ -95,85 +60,23 @@ def parse_add_command_content(message: Dict[str, Any]) -> Dict[str, Any]:
     Given a message object with reminder details,
     construct a JSON/dict.
     """
-    match = ADD_REGEX.search(message['content'])
-    content = match.groups()
-    return {
-        'zulip_user_email': message['sender_email'],
-        'title': content[4],
-        'created': message['timestamp'],
-        'deadline': compute_deadline_timestamp(
-            message['timestamp'], content[1], content[2], content[3]
-        ),
-        'stream': '',
-        'topic': '',
-        'active': True,
-    }
-
-def parse_add_repeat_command_content(message: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Given a message object with reminder details,
-    construct a JSON/dict.
-    """
-    match = ADD_REPEAT_REGEX.search(message['content'])
-    content = match.groups()
-    return {
-        'zulip_user_email': message['sender_email'],
-        'title': content[6],
-        'created': message['timestamp'],
-        'deadline': compute_deadline_timestamp(
-            message['timestamp'], content[1], content[2], content[3]
-        ),
-        'stream': '',
-        'topic': '',
-        'active': True,
-        'repeat_unit': content[5],
-        'repeat_value': content[4],
-    }
-
-
-def parse_add_stream_command_content(message: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Given a message object with reminder details,
-    construct a JSON/dict.
-    """
-    # add-stream stream topic 
-    # 1 minutes message
-    match = ADD_STREAM_REGEX.search(message['content'])
-    content = match.groups()
-    return {
-        'zulip_user_email': message['sender_email'],
-        'title': content[6],
-        'created': message['timestamp'],
-        'deadline': compute_deadline_timestamp(
-            message['timestamp'], content[3], content[4], content[5]
-        ),
-        'stream': content[0],
-        'topic': content[1],
-        'active': True,
-    }
-
-
-def parse_add_repeat_stream_command_content(message: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Given a message object with reminder details,
-    construct a JSON/dict.
-    """
     # add-stream stream topic 
     # 1 minutes every 5 minutes message
-    match = ADD_REPEAT_STREAM_REGEX.search(message['content'])
+    match = ADD_REGEX.search(message['content'])
     content = match.groups()
+    print(content)
     return {
         'zulip_user_email': message['sender_email'],
-        'title': content[8],
+        'title': content[10],
         'created': message['timestamp'],
         'deadline': compute_deadline_timestamp(
-            message['timestamp'], content[3], content[4], content[5]
+            message['timestamp'], content[4], content[5], content[6]
         ),
-        'stream': content[0],
-        'topic': content[1],
+        'stream': content[1] or '',
+        'topic': content[2] or '',
         'active': True,
-        'repeat_unit': content[7],
-        'repeat_value': content[6],
+        'repeat_unit': content[9],
+        'repeat_value': content[8],
     }
 
 
