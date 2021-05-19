@@ -14,17 +14,11 @@ from bot_helpers import (
     is_list_command,
     is_repeat_reminder_command,
     is_multi_remind_command,
-    is_add_repeat_reminder_command,
-    is_add_stream_command,
-    is_add_repeat_stream_command,
     parse_add_command_content,
     parse_remove_command_content,
     generate_reminders_list,
     parse_repeat_command_content,
     parse_multi_remind_command_content,
-    parse_add_reminder_command_content,
-    parse_add_stream_command_content,
-    parse_add_repeat_stream_command_content,
 )
 
 
@@ -33,31 +27,50 @@ A bot that schedules reminders for users.
 
 To store a reminder, mention or send a message to the bot in the following format:
 
-`add int <UNIT> <title_of_reminder>`
+`add in <number> <time unit> <content_of_reminder>`
+ie. `add in 1 day complete timesheets`
+(Avaliable time units: minutes, hours, days, weeks)
 
-`add 1 day clean the dishes`
-`add 10 hours eat`
+or
 
-Avaliable time units: minutes, hours, days, weeks
+`add at <date and time> <content_of_reminder>`
+ie. `add at 13/05/2021 16:00 complete timesheets`
+(Date and time must be in the format: DD/MM/YYYY HH:MM)
 
-To add a reminder and repeat:
-`add int <UNIT> every int <UNIT> <title_of_reminder>`
+These reminders will be sent to your private messages from the Reminder Bot
 
-`add 1 minutes every 1 minutes message`
+To add a repeat reminder:
+`add in <number> <time unit> repeat every <number> <time unit> <content_of_reminder>`
+ie. `add in 1 day repeat every 1 week complete timesheets`
+(Avaliable time units: minutes, hours, days, weeks)
+
+or
+
+`add at <date and time> repeat every <number> <time unit> <content_of_reminder>`
+ie. `add at 13/05/2021 16:00 repeat every 7 days complete timesheets`
+(Date and time must be in the format: DD/MM/YYYY HH:MM)
+
+To add a reminder to a stream/topic:
+`add stream: <stream name> topic: <topic name> in <number> <time unit> (optional: repeat every <number> <time unit>) <content_of_reminder>`
+ie. `add stream: Timesheets topic: Please remember your timesheets in 1 day repeat every 1 week complete timesheets`
+(Avaliable time units: minutes, hours, days, weeks)
+
+or
+
+`add stream: <stream name> topic: <topic name> at <date and time> (optional: repeat every <number> <time unit>) <content_of_reminder>`
+ie. `add stream: Timesheets topic: Please remember your timesheets at 13/05/2021 16:00 repeat every 7 days complete timesheets`
+(Date and time must be in the format: DD/MM/YYYY HH:MM)
 
 To remove a reminder:
-`remove <reminder_id>`
+`remove <reminder id>`
 
 To list reminders:
 `list`
 
-To repeat a reminder: 
-repeat <reminder_id> every <int> <time_unit>
-
-`repeat 23 every 2 weeks`
-
-Avaliable units: days, weeks, months
-
+To repeat an existing reminder: 
+`repeat <reminder id> every <number> <time unit>`
+ie. `repeat 23 every 2 weeks`
+(Avaliable time units: minutes, hours, days, weeks)
 
 To add a reminder to a stream
 `add-stream stream topic 
@@ -96,54 +109,47 @@ def get_bot_response(message: Dict[str, Any], bot_handler: Any) -> str:
         return USAGE
 
     try:
-        if is_add_repeat_reminder_command(message["content"]):
-            reminder_object = parse_add_reminder_command_content(message)
-            response = requests.post(url=ADD_ENDPOINT, json=reminder_object)
-            reminder_id = response.json()["reminder_id"]
-            reminder_object["reminder_id"] = str(reminder_id)
-            response = requests.post(url=REPEAT_ENDPOINT, json=reminder_object)
-            response = response.json()
-            assert response["success"]
-            return f"Reminder stored. Your reminder id is: {reminder_id}"
         if is_add_command(message["content"]):
             reminder_object = parse_add_command_content(message)
             response = requests.post(url=ADD_ENDPOINT, json=reminder_object)
             response = response.json()
             assert response["success"]
-            return f"Reminder stored. Your reminder id is: {response['reminder_id']}"
-        if is_add_repeat_stream_command(message["content"]):
-            reminder_object = parse_add_repeat_stream_command_content(message)
-            response = requests.post(url=ADD_ENDPOINT, json=reminder_object)
-            reminder_id = response.json()["reminder_id"]
+
+            reminder_id = response["reminder_id"]
+            stream_details = ""
+            if reminder_object['stream'] != '' and reminder_object['topic'] != '':
+                stream_details = f" Your reminder will be display in Stream: {reminder_object['stream']} - Topic: {reminder_object['topic']}."
+
+            if reminder_object["repeat_value"] is None or reminder_object["repeat_unit"] is None:
+                return f"Reminder stored.{stream_details} Your reminder id is: {reminder_id}"
+                
             reminder_object["reminder_id"] = str(reminder_id)
             response = requests.post(url=REPEAT_ENDPOINT, json=reminder_object)
             response = response.json()
             assert response["success"]
-            return f"Repeat reminder stored in stream {reminder_object['stream']} topic {reminder_object['topic']}. Your reminder id is: {reminder_id}"
-        if is_add_stream_command(message["content"]):
-            reminder_object = parse_add_stream_command_content(message)
-            response = requests.post(url=ADD_ENDPOINT, json=reminder_object)
-            response = response.json()
-            assert response["success"]
-            return f"Reminder stored in stream {reminder_object['stream']} topic {reminder_object['topic']}. Your reminder id is: {response['reminder_id']}"
+            return f"Repeat reminder stored.{stream_details} Your reminder id is: {reminder_id}"
+
         if is_remove_command(message["content"]):
             reminder_id = parse_remove_command_content(message["content"])
             response = requests.post(url=REMOVE_ENDPOINT, json=reminder_id)
             response = response.json()
             assert response["success"]
             return "Reminder deleted."
+
         if is_list_command(message["content"]):
             zulip_user_email = {"zulip_user_email": message["sender_email"]}
             response = requests.post(url=LIST_ENDPOINT, json=zulip_user_email)
             response = response.json()
             assert response["success"]
             return generate_reminders_list(response)
+
         if is_repeat_reminder_command(message["content"]):
             repeat_request = parse_repeat_command_content(message["content"])
             response = requests.post(url=REPEAT_ENDPOINT, json=repeat_request)
             response = response.json()
             assert response["success"]
             return f"Reminder will be repeated every {repeat_request['repeat_value']} {repeat_request['repeat_unit']}."
+
         if is_multi_remind_command(message["content"]):
             multi_remind_request = parse_multi_remind_command_content(
                 message["content"]
@@ -154,7 +160,9 @@ def get_bot_response(message: Dict[str, Any], bot_handler: Any) -> str:
             response = response.json()
             assert response["success"]
             return f"Reminder will be sent to the specified recepients."  # Todo: add list of recepients
-        return "Invalid input. Please check help."
+        return f"""Invalid input.
+        
+        {USAGE}"""
     except requests.exceptions.ConnectionError:
         return "Server not running, call Karim"
     except (json.JSONDecodeError, AssertionError):
