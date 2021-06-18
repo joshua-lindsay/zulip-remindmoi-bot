@@ -5,10 +5,10 @@ from datetime import timedelta, datetime
 SINGULAR_UNITS = ['minute', 'hour', 'day', 'week']
 
 UNITS_REGEX = '(\d+) (minute|hour|day|week)s?'
-DATETIME_REGEX = '(\d{1,2}/\d{1,2}/\d{4} (?:2[0-3]|[01][0-9]):[0-5][0-9])'
+DATETIME_REGEX = '(\d{1,2}\/\d{1,2}\/\d{4} (?:2[0-3]|[01][0-9]):[0-5][0-9])'
 TIMESTAMP_REGEX = f'(in {UNITS_REGEX}|at {DATETIME_REGEX})'
 
-ADD_REGEX = re.compile(f'^add\s+(stream:\s*(.+)\s+topic:\s*(.+)\s+)?{TIMESTAMP_REGEX}\s+(repeat every\s+{UNITS_REGEX}\s+)?(.+)$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
+ADD_REGEX = re.compile(f'^add\s+(stream:\s*(.{{1,60}})\s+topic:\s*(.{{1,60}})\s+)?{TIMESTAMP_REGEX}\s+(repeat every\s+{UNITS_REGEX}\s+)?(.{{1,300}})$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
 REPEAT_REGEX = re.compile(f'^repeat\s+(\d+)\s+every\s+{UNITS_REGEX}$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
 REMOVE_REGEX = re.compile('^remove\s+(\d+)$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
 LIST_REGEX = re.compile('^list$', flags=re.MULTILINE|re.DOTALL|re.IGNORECASE)
@@ -64,7 +64,6 @@ def parse_add_command_content(message: Dict[str, Any]) -> Dict[str, Any]:
     # 1 minutes every 5 minutes message
     match = ADD_REGEX.search(message['content'])
     content = match.groups()
-    print(content)
     return {
         'zulip_user_email': message['sender_email'],
         'title': content[10],

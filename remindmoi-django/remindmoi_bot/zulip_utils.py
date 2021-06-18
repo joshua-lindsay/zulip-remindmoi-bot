@@ -26,9 +26,7 @@ def send_private_zulip_reminder(reminder_id: int) -> bool:
 
 def send_stream_zulip_reminder(reminder_id: int) -> bool:
     reminder = Reminder.objects.get(reminder_id=reminder_id)
-    # emails = reminder.zulip_user_email.split(',')
 
-    
     content = f"{reminder.title}. Reminder id: {reminder.reminder_id}"
     response = client.send_message(
         {
