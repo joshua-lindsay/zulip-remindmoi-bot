@@ -30,12 +30,14 @@ To store a reminder, mention or send a message to the bot in the following forma
 `add in <number> <time unit> <content_of_reminder>`
 ie. `add in 1 day complete timesheets`
 (Avaliable time units: minutes, hours, days, weeks)
+(The content of the reminder can be a maximum of 300 characters long)
 
 or
 
 `add at <date and time> <content_of_reminder>`
 ie. `add at 13/05/2021 16:00 complete timesheets`
 (Date and time must be in the format: DD/MM/YYYY HH:MM)
+(The content of the reminder can be a maximum of 300 characters long)
 
 These reminders will be sent to your private messages from the Reminder Bot
 
@@ -43,23 +45,27 @@ To add a repeat reminder:
 `add in <number> <time unit> repeat every <number> <time unit> <content_of_reminder>`
 ie. `add in 1 day repeat every 1 week complete timesheets`
 (Avaliable time units: minutes, hours, days, weeks)
+(The content of the reminder can be a maximum of 300 characters long)
 
 or
 
 `add at <date and time> repeat every <number> <time unit> <content_of_reminder>`
 ie. `add at 13/05/2021 16:00 repeat every 7 days complete timesheets`
 (Date and time must be in the format: DD/MM/YYYY HH:MM)
+(The content of the reminder can be a maximum of 300 characters long)
 
 To add a reminder to a stream/topic:
 `add stream: <stream name> topic: <topic name> in <number> <time unit> (optional: repeat every <number> <time unit>) <content_of_reminder>`
 ie. `add stream: Timesheets topic: Please remember your timesheets in 1 day repeat every 1 week complete timesheets`
 (Avaliable time units: minutes, hours, days, weeks)
+(The content of the reminder can be a maximum of 300 characters long)
 
 or
 
 `add stream: <stream name> topic: <topic name> at <date and time> (optional: repeat every <number> <time unit>) <content_of_reminder>`
 ie. `add stream: Timesheets topic: Please remember your timesheets at 13/05/2021 16:00 repeat every 7 days complete timesheets`
 (Date and time must be in the format: DD/MM/YYYY HH:MM)
+(The content of the reminder can be a maximum of 300 characters long)
 
 To remove a reminder:
 `remove <reminder id>`
@@ -100,11 +106,11 @@ class RemindMoiHandler(object):
         return USAGE
 
     def handle_message(self, message: Dict[str, Any], bot_handler: Any) -> None:
-        bot_response = get_bot_response(message, bot_handler)
+        bot_response = get_bot_response(message)
         bot_handler.send_reply(message, bot_response)
 
 
-def get_bot_response(message: Dict[str, Any], bot_handler: Any) -> str:
+def get_bot_response(message: Dict[str, Any]) -> str:
     if message["content"].startswith(("help", "?", "halp")):
         return USAGE
 
@@ -164,11 +170,9 @@ def get_bot_response(message: Dict[str, Any], bot_handler: Any) -> str:
         
         {USAGE}"""
     except requests.exceptions.ConnectionError:
-        return "Server not running, call Karim"
-    except (json.JSONDecodeError, AssertionError):
+        return "Reminder bot server is not running"
+    except (json.JSONDecodeError, AssertionError, OverflowError):
         return "Something went wrong"
-    except OverflowError:
-        return "What's wrong with you?"
 
 
 handler_class = RemindMoiHandler
